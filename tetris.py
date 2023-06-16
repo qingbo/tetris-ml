@@ -1,4 +1,6 @@
+import random
 import pygame
+import time
 import sys
 
 from tetromino import Tetromino
@@ -66,6 +68,10 @@ class TetrisGame:
         self.tetromino = Tetromino(GRID_WIDTH // 2 - 2, -1)
         self.next_tetrominos = self.get_next_tetrominos(5)
         self.update_grid()
+
+        # Useful for training
+        self.holes = 0
+        self.bumpiness = 0
 
     def update_grid(self):
         self.grid = [[self.locked_positions.get((x, y), BLACK) for x in range(GRID_WIDTH)] for y in range(GRID_HEIGHT)]
@@ -140,10 +146,30 @@ class TetrisGame:
 
         return lines_cleared
 
+    def complete_fall(self):
+        for x, y in self.tetromino.enumerate_cells():
+            self.locked_positions[(self.tetromino.x + x, self.tetromino.y + y)] = self.tetromino.shape.color
+
+        lines_cleared = self.clear_lines()
+        self.score += SCORE_FACTORS[lines_cleared] * self.level
+
+        self.total_lines_cleared += lines_cleared
+        self.level = self.total_lines_cleared // LINES_PER_LEVEL + 1
+
+        self.update_grid()
+        self.rotate_upcoming()
+
+        self.fall_speed = 500 / (1 + (self.level - 1) * 0.2)
+
+        if not self.valid_move():
+            self.update_records_and_restart()
+        # print(f"Holes: {self.count_holes()}")
+        # print(f"Bumpiness: {self.calculate_bumpiness()}")
+
     def get_next_tetrominos(self, num):
         return [Tetromino(GRID_WIDTH // 2 - 2, 0) for _ in range(num)]
 
-    def rotate_next(self):
+    def rotate_upcoming(self):
         self.tetromino = self.next_tetrominos.pop(0)
         self.next_tetrominos.extend(self.get_next_tetrominos(1))
 
@@ -199,12 +225,65 @@ class TetrisGame:
         self.record_score = max(self.record_score, self.score)
         self.reset()
 
+    def update_screen(self):
+        self.screen.fill(BLACK)
+        self.draw_grid()
+        self.draw_tetromino()
+        self.draw_preview()
+        self.draw_pause_button()
+        self.draw_stat(f"Level: {self.level}", 50)
+        self.draw_stat(f"Lines: {self.total_lines_cleared}", 100)
+        self.draw_stat(f"Score: {self.score}", 150)
+        self.draw_stat(f"Interval: {self.fall_speed:.0f}", 200)
+        self.draw_stat("RECORDS", 450)
+        self.draw_stat(f"Rounds: {self.rounds}", 500)
+        self.draw_stat(f"Level: {self.record_level}", 550)
+        self.draw_stat(f"Lines: {self.record_lines}", 600)
+        self.draw_stat(f"Score: {self.record_score}", 650)
+        pygame.display.update()
+
+    def move_h(self, direction):
+        self.tetromino.x += direction
+        if not self.valid_move():
+            self.tetromino.x -= direction
+
+    def count_holes(self):
+        num_holes = 0
+        for x in range(GRID_WIDTH):
+            found_locked_pos = False
+            for y in range(GRID_HEIGHT):
+                if (x, y) in self.locked_positions:
+                    found_locked_pos = True
+                elif found_locked_pos:
+                    num_holes += 1
+        self.holes = num_holes
+        return num_holes
+
+    def calculate_bumpiness(self):
+        bumpiness = 0
+        column_heights = []
+
+        for x in range(GRID_WIDTH):
+            height = 0
+            for y in range(GRID_HEIGHT):
+                if (x, y) in self.locked_positions:
+                    height = GRID_HEIGHT - y
+                    break
+            column_heights.append(height)
+
+        for i in range(1, len(column_heights)):
+            bumpiness += abs(column_heights[i] - column_heights[i - 1])
+
+        self.bumpiness = bumpiness
+        return bumpiness
+
     def run(self):
         while True:
             self.fall_time += self.clock.get_rawtime()
             self.clock.tick()
 
             # Tetromino movement
+            space_pressed = False
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -214,14 +293,11 @@ class TetrisGame:
                         self.is_paused = not self.is_paused
                 elif event.type == pygame.KEYDOWN and not self.is_paused:
                     if event.key == pygame.K_LEFT:
-                        self.tetromino.x -= 1
-                        if not self.valid_move():
-                            self.tetromino.x += 1
+                        self.move_h(-1)
                     if event.key == pygame.K_RIGHT:
-                        self.tetromino.x += 1
-                        if not self.valid_move():
-                            self.tetromino.x -= 1
+                        self.move_h(1)
                     if event.key == pygame.K_DOWN:
+                        space_pressed = True
                         self.tetromino.y += 1
                         if not self.valid_move():
                             self.tetromino.y -= 1
@@ -229,54 +305,62 @@ class TetrisGame:
                         while self.valid_move():
                             self.tetromino.y += 1
                         self.tetromino.y -= 1
+                        self.complete_fall()
                     if event.key == pygame.K_UP:
                         self.tetromino.rotate()
                         if not self.valid_move():
                             self.tetromino.unrotate()
 
             # Tetromino falling
-            if self.fall_time > self.fall_speed and not self.is_paused:
+            if self.fall_time > self.fall_speed and not self.is_paused and not space_pressed:
                 self.fall_time = 0
                 self.tetromino.y += 1
                 if not self.valid_move():
                     self.tetromino.y -= 1
-                    for x, y in self.tetromino.enumerate_cells():
-                        self.locked_positions[(self.tetromino.x + x, self.tetromino.y + y)] = self.tetromino.shape.color
-
-                    lines_cleared = self.clear_lines()
-                    self.score += SCORE_FACTORS[lines_cleared] * self.level
-
-                    self.total_lines_cleared += lines_cleared
-                    self.level = self.total_lines_cleared // LINES_PER_LEVEL + 1
-
-                    self.update_grid()
-                    self.rotate_next()
-
-                    if not self.valid_move():
-                        self.update_records_and_restart()
-                        continue
-
-                    self.fall_speed = 500 / (1 + (self.level - 1) * 0.2)
+                    self.complete_fall()
 
             # Drawing
-            self.screen.fill(BLACK)
-            self.draw_grid()
-            self.draw_tetromino()
-            self.draw_preview()
-            self.draw_pause_button()
-            self.draw_stat(f"Level: {self.level}", 50)
-            self.draw_stat(f"Lines: {self.total_lines_cleared}", 100)
-            self.draw_stat(f"Score: {self.score}", 150)
-            self.draw_stat(f"Interval: {self.fall_speed:.0f}", 200)
-            self.draw_stat("RECORDS", 450)
-            self.draw_stat(f"Rounds: {self.rounds}", 500)
-            self.draw_stat(f"Level: {self.record_level}", 550)
-            self.draw_stat(f"Lines: {self.record_lines}", 600)
-            self.draw_stat(f"Score: {self.record_score}", 650)
-            pygame.display.update()
+            self.update_screen()
+
+    def step(self, rotate, column, delay=1):
+        orig_score, orig_holes, orig_bumpiness = self.score, self.holes, self.bumpiness
+
+        # Rotate.
+        for _ in range(rotate):
+            self.tetromino.rotate()
+
+        # Move.
+        movement = column - 4
+        if movement != 0:
+            distance = abs(movement)
+            direction = movement // distance
+            for _ in range(distance):
+                self.move_h(direction)
+
+        # Fall.
+        while self.valid_move():
+            self.tetromino.y += 1
+        self.tetromino.y -= 1
+        self.complete_fall()
+
+        self.count_holes()
+        self.calculate_bumpiness()
+
+        # Calculate reward
+        # Consider game reset
+
+        if delay:
+            for event in pygame.event.get():
+                pass
+            self.update_screen()
+            time.sleep(delay)
 
 
 if __name__ == "__main__":
     pygame.init()
     game = TetrisGame()
     game.run()
+    # for _ in range(10):
+    #     rotate = random.randint(0, 3)
+    #     column = random.randint(0, 9)
+    #     game.step(rotate, column)
