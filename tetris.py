@@ -79,42 +79,23 @@ class TetrisGame:
     def draw_grid(self):
         for y in range(GRID_HEIGHT):
             for x in range(GRID_WIDTH):
-                pygame.draw.rect(
-                    self.screen,
+                self.draw_rect(
+                    (LEFT_SIDEBAR_WIDTH + x * GRID_SIZE, TOP_PADDING + y * GRID_SIZE, GRID_SIZE, GRID_SIZE),
                     self.grid[y][x],
-                    (LEFT_SIDEBAR_WIDTH + x * GRID_SIZE, TOP_PADDING + y * GRID_SIZE, GRID_SIZE, GRID_SIZE),
-                    0,
-                )
-                pygame.draw.rect(
-                    self.screen,
                     GRAY,
-                    (LEFT_SIDEBAR_WIDTH + x * GRID_SIZE, TOP_PADDING + y * GRID_SIZE, GRID_SIZE, GRID_SIZE),
-                    1,
                 )
 
     def draw_tetromino(self):
         for x, y in self.tetromino.enumerate_cells():
-            pygame.draw.rect(
-                self.screen,
+            self.draw_rect(
+                (
+                    LEFT_SIDEBAR_WIDTH + (self.tetromino.x + x) * GRID_SIZE,
+                    TOP_PADDING + (self.tetromino.y + y) * GRID_SIZE,
+                    GRID_SIZE,
+                    GRID_SIZE,
+                ),
                 self.tetromino.shape.color,
-                (
-                    LEFT_SIDEBAR_WIDTH + (self.tetromino.x + x) * GRID_SIZE,
-                    TOP_PADDING + (self.tetromino.y + y) * GRID_SIZE,
-                    GRID_SIZE,
-                    GRID_SIZE,
-                ),
-                0,
-            )
-            pygame.draw.rect(
-                self.screen,
                 GRAY,
-                (
-                    LEFT_SIDEBAR_WIDTH + (self.tetromino.x + x) * GRID_SIZE,
-                    TOP_PADDING + (self.tetromino.y + y) * GRID_SIZE,
-                    GRID_SIZE,
-                    GRID_SIZE,
-                ),
-                1,
             )
 
     def valid_move(self):
@@ -173,30 +154,22 @@ class TetrisGame:
         self.tetromino = self.next_tetrominos.pop(0)
         self.next_tetrominos.extend(self.get_next_tetrominos(1))
 
+    def draw_rect(self, rect, color, border_color):
+        pygame.draw.rect(self.screen, color, rect, 0)
+        pygame.draw.rect(self.screen, border_color, rect, 1)
+
     def draw_preview(self):
         for i, tetromino in enumerate(self.next_tetrominos):
             for x, y in tetromino.enumerate_cells():
-                pygame.draw.rect(
-                    self.screen,
+                self.draw_rect(
+                    (
+                        LEFT_SIDEBAR_WIDTH + GRID_WIDTH * GRID_SIZE + PREVIEW_OFFSET_X + x * GRID_SIZE,
+                        PREVIEW_OFFSET_Y + i * GRID_SIZE * PREVIEW_HEIGHT + y * GRID_SIZE,
+                        GRID_SIZE,
+                        GRID_SIZE,
+                    ),
                     tetromino.shape.color,
-                    (
-                        LEFT_SIDEBAR_WIDTH + GRID_WIDTH * GRID_SIZE + PREVIEW_OFFSET_X + x * GRID_SIZE,
-                        PREVIEW_OFFSET_Y + i * GRID_SIZE * PREVIEW_HEIGHT + y * GRID_SIZE,
-                        GRID_SIZE,
-                        GRID_SIZE,
-                    ),
-                    0,
-                )
-                pygame.draw.rect(
-                    self.screen,
                     GRAY,
-                    (
-                        LEFT_SIDEBAR_WIDTH + GRID_WIDTH * GRID_SIZE + PREVIEW_OFFSET_X + x * GRID_SIZE,
-                        PREVIEW_OFFSET_Y + i * GRID_SIZE * PREVIEW_HEIGHT + y * GRID_SIZE,
-                        GRID_SIZE,
-                        GRID_SIZE,
-                    ),
-                    1,
                 )
 
     def draw_pause_button(self):
