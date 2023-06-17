@@ -47,9 +47,9 @@ SHAPE_VISUALS = [
       "OOO.",
       "..O.",
       "...."],
-     ["..O.",
-      "..O.",
-      ".OO.",
+     [".O..",
+      ".O..",
+      "OO..",
       "...."]],
     [["....",
       ".OO.",
@@ -75,26 +75,41 @@ SHAPE_VISUALS = [
       "OOOO",
       "....",
       "...."],
-     [".O..",
-      ".O..",
-      ".O..",
-      ".O.."]]
+     ["..O.",
+      "..O.",
+      "..O.",
+      "..O."]]
 ]
 # fmt: on
 
 COLORS = [(192, 73, 188), (170, 105, 62), (77, 64, 159), (177, 156, 70), (173, 225, 81), (167, 63, 64), (93, 178, 135)]
 
 
+class RotationInfo:
+    def __init__(self, visual):
+        self.matrix = [[c == "O" for c in row] for row in visual]
+        left, right = 3, 0
+        for row in self.matrix:
+            for x, filled in enumerate(row):
+                if not filled:
+                    continue
+                left = min(left, x)
+                right = max(right, x)
+        self.left = left
+        self.right = right
+
+
 class Shape:
-    def __init__(self, variants, color):
-        self.rotations = [[[c == "O" for c in row] for row in v] for v in variants]
+    def __init__(self, variants, color, index):
+        self.rotations = [RotationInfo(v) for v in variants]
         self.color = color
+        self.index = index
 
     def num_rotations(self):
         return len(self.rotations)
 
 
-SHAPES = [Shape(variants, color) for variants, color in zip(SHAPE_VISUALS, COLORS)]
+SHAPES = [Shape(variants, color, i) for i, (variants, color) in enumerate(zip(SHAPE_VISUALS, COLORS))]
 
 
 # 7-bag - https://simon.lc/the-history-of-tetris-randomizers
@@ -114,20 +129,26 @@ RANDOM_BAG = Shape7Bag()
 
 
 class Tetromino:
-    def __init__(self, x, y):
+    def __init__(self, x, y, shape=None, rotation=0):
         self.x = x
         self.y = y
-        self.shape = RANDOM_BAG.next()
-        self.rotation = 0  # random.randrange(0, self.shape.num_rotations())
+        self.shape = shape if shape else RANDOM_BAG.next()
+        self.rotation = rotation
+        self.rotation_info = self.shape.rotations[self.rotation]
 
     def rotate(self):
         self.rotation = (self.rotation + 1) % self.shape.num_rotations()
+        self.rotation_info = self.shape.rotations[self.rotation]
 
     def unrotate(self):
         self.rotation = (self.rotation - 1) % self.shape.num_rotations()
+        self.rotation_info = self.shape.rotations[self.rotation]
 
     def enumerate_cells(self):
-        for y, row in enumerate(self.shape.rotations[self.rotation]):
+        for y, row in enumerate(self.rotation_info.matrix):
             for x, cell in enumerate(row):
                 if cell:
                     yield x, y
+
+    def rotated_copy(self, rotation):
+        return Tetromino(self.x, self.y, self.shape, rotation)

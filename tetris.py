@@ -47,7 +47,10 @@ GREEN = (0, 255, 0)
 
 
 class TetrisGame:
-    def __init__(self):
+    def __init__(self, training_mode=False):
+        self.training_mode = training_mode
+
+        pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Tetris")
         self.rounds = 0
@@ -132,13 +135,24 @@ class TetrisGame:
             self.locked_positions[(self.tetromino.x + x, self.tetromino.y + y)] = self.tetromino.shape.color
 
         lines_cleared = self.clear_lines()
-        self.score += SCORE_FACTORS[lines_cleared] * self.level
+        score_earned = SCORE_FACTORS[lines_cleared] * self.level
+        self.score += score_earned
 
         self.total_lines_cleared += lines_cleared
-        self.level = self.total_lines_cleared // LINES_PER_LEVEL + 1
+        # Increase level/speed.
+        self.level = 1 if self.training_mode else self.total_lines_cleared // LINES_PER_LEVEL + 1
 
         self.update_grid()
         self.rotate_upcoming()
+
+        orig_holes = self.holes
+        orig_bumpiness = self.bumpiness
+        self.count_holes()
+        self.calculate_bumpiness()
+        increased_holes = self.holes - orig_holes
+        increased_bumpiness = self.bumpiness - orig_bumpiness
+        self.reward = score_earned - (increased_holes * 2) - (increased_bumpiness - 3)
+        # print(f"{self.reward}: bumpiness {orig_bumpiness} -> {self.bumpiness}")
 
         self.fall_speed = 500 / (1 + (self.level - 1) * 0.2)
 
@@ -270,11 +284,11 @@ class TetrisGame:
                     if event.key == pygame.K_RIGHT:
                         self.move_h(1)
                     if event.key == pygame.K_DOWN:
-                        space_pressed = True
                         self.tetromino.y += 1
                         if not self.valid_move():
                             self.tetromino.y -= 1
                     if event.key == pygame.K_SPACE:
+                        space_pressed = True
                         while self.valid_move():
                             self.tetromino.y += 1
                         self.tetromino.y -= 1
@@ -303,7 +317,7 @@ class TetrisGame:
             self.tetromino.rotate()
 
         # Move.
-        movement = column - 4
+        movement = column - 3
         if movement != 0:
             distance = abs(movement)
             direction = movement // distance
@@ -330,7 +344,6 @@ class TetrisGame:
 
 
 if __name__ == "__main__":
-    pygame.init()
     game = TetrisGame()
     game.run()
     # for _ in range(10):
