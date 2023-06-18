@@ -47,8 +47,9 @@ GREEN = (0, 255, 0)
 
 
 class TetrisGame:
-    def __init__(self, training_mode=False):
+    def __init__(self, training_mode=False, mirror_mode=False):
         self.training_mode = training_mode
+        self.mirror_mode = mirror_mode
 
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -68,8 +69,9 @@ class TetrisGame:
         self.total_lines_cleared = 0
         self.is_paused = False
         self.level = 1
-        self.tetromino = Tetromino(GRID_WIDTH // 2 - 2, -1)
-        self.next_tetrominos = self.get_next_tetrominos(5)
+        self.falling = None if self.mirror_mode else Tetromino(GRID_WIDTH // 2 - 2, -1)
+        self.next_tetrominos = [] if self.mirror_mode else self.get_next_tetrominos(5)
+        self.held = None
         self.update_grid()
 
         # Useful for training
@@ -88,26 +90,41 @@ class TetrisGame:
                     GRAY,
                 )
 
-    def draw_tetromino(self):
-        for x, y in self.tetromino.enumerate_cells():
-            self.draw_rect(
-                (
-                    LEFT_SIDEBAR_WIDTH + (self.tetromino.x + x) * GRID_SIZE,
-                    TOP_PADDING + (self.tetromino.y + y) * GRID_SIZE,
-                    GRID_SIZE,
-                    GRID_SIZE,
-                ),
-                self.tetromino.shape.color,
-                GRAY,
-            )
+    def draw_falling(self):
+        if self.falling:
+            for x, y in self.falling.enumerate_cells():
+                self.draw_rect(
+                    (
+                        LEFT_SIDEBAR_WIDTH + (self.falling.x + x) * GRID_SIZE,
+                        TOP_PADDING + (self.falling.y + y) * GRID_SIZE,
+                        GRID_SIZE,
+                        GRID_SIZE,
+                    ),
+                    self.falling.shape.color,
+                    GRAY,
+                )
+
+    def draw_held(self):
+        if self.held:
+            for x, y in self.held.enumerate_cells():
+                self.draw_rect(
+                    (
+                        50 + x * GRID_SIZE,
+                        50 + y * GRID_SIZE,
+                        GRID_SIZE,
+                        GRID_SIZE,
+                    ),
+                    self.held.shape.color,
+                    GRAY,
+                )
 
     def valid_move(self):
-        for x, y in self.tetromino.enumerate_cells():
+        for x, y in self.falling.enumerate_cells():
             if (
-                self.tetromino.x + x < 0
-                or self.tetromino.x + x >= GRID_WIDTH
-                or self.tetromino.y + y >= GRID_HEIGHT
-                or self.grid[self.tetromino.y + y][self.tetromino.x + x] != BLACK
+                self.falling.x + x < 0
+                or self.falling.x + x >= GRID_WIDTH
+                or self.falling.y + y >= GRID_HEIGHT
+                or self.grid[self.falling.y + y][self.falling.x + x] != BLACK
             ):
                 return False
 
@@ -131,8 +148,8 @@ class TetrisGame:
         return lines_cleared
 
     def complete_fall(self):
-        for x, y in self.tetromino.enumerate_cells():
-            self.locked_positions[(self.tetromino.x + x, self.tetromino.y + y)] = self.tetromino.shape.color
+        for x, y in self.falling.enumerate_cells():
+            self.locked_positions[(self.falling.x + x, self.falling.y + y)] = self.falling.shape.color
 
         lines_cleared = self.clear_lines()
         score_earned = SCORE_FACTORS[lines_cleared] * self.level
@@ -165,7 +182,7 @@ class TetrisGame:
         return [Tetromino(GRID_WIDTH // 2 - 2, 0) for _ in range(num)]
 
     def rotate_upcoming(self):
-        self.tetromino = self.next_tetrominos.pop(0)
+        self.falling = self.next_tetrominos.pop(0)
         self.next_tetrominos.extend(self.get_next_tetrominos(1))
 
     def draw_rect(self, rect, color, border_color):
@@ -215,24 +232,27 @@ class TetrisGame:
     def update_screen(self):
         self.screen.fill(BLACK)
         self.draw_grid()
-        self.draw_tetromino()
+        self.draw_falling()
         self.draw_preview()
-        self.draw_pause_button()
-        self.draw_stat(f"Level: {self.level}", 50)
-        self.draw_stat(f"Lines: {self.total_lines_cleared}", 100)
-        self.draw_stat(f"Score: {self.score}", 150)
-        self.draw_stat(f"Interval: {self.fall_speed:.0f}", 200)
-        self.draw_stat("RECORDS", 450)
-        self.draw_stat(f"Rounds: {self.rounds}", 500)
-        self.draw_stat(f"Level: {self.record_level}", 550)
-        self.draw_stat(f"Lines: {self.record_lines}", 600)
-        self.draw_stat(f"Score: {self.record_score}", 650)
+        if self.mirror_mode:
+            self.draw_held()
+        else:
+            self.draw_pause_button()
+            self.draw_stat(f"Level: {self.level}", 50)
+            self.draw_stat(f"Lines: {self.total_lines_cleared}", 100)
+            self.draw_stat(f"Score: {self.score}", 150)
+            self.draw_stat(f"Interval: {self.fall_speed:.0f}", 200)
+            self.draw_stat("RECORDS", 450)
+            self.draw_stat(f"Rounds: {self.rounds}", 500)
+            self.draw_stat(f"Level: {self.record_level}", 550)
+            self.draw_stat(f"Lines: {self.record_lines}", 600)
+            self.draw_stat(f"Score: {self.record_score}", 650)
         pygame.display.update()
 
     def move_h(self, direction):
-        self.tetromino.x += direction
+        self.falling.x += direction
         if not self.valid_move():
-            self.tetromino.x -= direction
+            self.falling.x -= direction
 
     def count_holes(self):
         num_holes = 0
@@ -284,37 +304,119 @@ class TetrisGame:
                     if event.key == pygame.K_RIGHT:
                         self.move_h(1)
                     if event.key == pygame.K_DOWN:
-                        self.tetromino.y += 1
+                        self.falling.y += 1
                         if not self.valid_move():
-                            self.tetromino.y -= 1
+                            self.falling.y -= 1
                     if event.key == pygame.K_SPACE:
                         space_pressed = True
                         while self.valid_move():
-                            self.tetromino.y += 1
-                        self.tetromino.y -= 1
+                            self.falling.y += 1
+                        self.falling.y -= 1
                         self.complete_fall()
                     if event.key == pygame.K_UP:
-                        self.tetromino.rotate()
+                        self.falling.rotate()
                         if not self.valid_move():
-                            self.tetromino.unrotate()
+                            self.falling.unrotate()
 
             # Tetromino falling
             if self.fall_time > self.fall_speed and not self.is_paused and not space_pressed:
                 self.fall_time = 0
-                self.tetromino.y += 1
+                self.falling.y += 1
                 if not self.valid_move():
-                    self.tetromino.y -= 1
+                    self.falling.y -= 1
                     self.complete_fall()
 
             # Drawing
             self.update_screen()
+
+    def is_valid_position(self, tetromino: Tetromino):
+        for x, y in tetromino.enumerate_cells():
+            if (
+                tetromino.x + x < 0
+                or tetromino.x + x >= GRID_WIDTH
+                or tetromino.y + y >= GRID_HEIGHT
+                or (tetromino.x + x, tetromino.y + y) in self.locked_positions
+            ):
+                return False
+
+        return True
+
+    def estimate_cost(self, tetromino: Tetromino):
+        # print(tetromino.x, tetromino.y, tetromino.shape.rotations)
+        locked_positions = dict(self.locked_positions)
+        for x, y in tetromino.enumerate_cells():
+            locked_positions[(tetromino.x + x, tetromino.y + y)] = tetromino.shape.color
+        # print(locked_positions)
+
+        # Try to clear lines first.
+        lines_cleared = 0
+        for y in reversed(range(GRID_HEIGHT)):
+            if all((x, y) in locked_positions for x in range(GRID_WIDTH)):
+                for x in range(GRID_WIDTH):
+                    del locked_positions[(x, y)]
+                lines_cleared += 1
+            elif lines_cleared > 0:
+                for x in range(GRID_WIDTH):
+                    if (x, y) not in locked_positions:
+                        continue
+                    value = locked_positions.pop((x, y))
+                    locked_positions[(x, y + lines_cleared)] = value
+
+        num_holes = 0
+        bumpiness = 0
+        column_heights = []
+        for x in range(GRID_WIDTH):
+            found_locked_pos = False
+            for y in range(GRID_HEIGHT):
+                if (x, y) in locked_positions:
+                    if not found_locked_pos:
+                        found_locked_pos = True
+                        column_heights.append(GRID_HEIGHT - y)
+                elif found_locked_pos:
+                    num_holes += 1
+            if not found_locked_pos:
+                column_heights.append(0)
+
+        for i in range(1, len(column_heights)):
+            bumpiness += abs(column_heights[i] - column_heights[i - 1])
+        total_height = sum(column_heights)
+        cost = total_height + bumpiness * 2 + num_holes * 20
+        return cost
+
+    def get_best_action(self):
+        if not self.falling:
+            print("not falling...")
+            return 0, 0
+
+        min_cost = 10000
+        best_r, best_x = 0, 0
+        # Check each rotation.
+        for r in range(self.falling.shape.num_rotations()):
+            # Make a copy.
+            tetromino = self.falling.rotated_copy(r)
+            initial_y = tetromino.y
+            # Try from left to right.
+            for x in range(-tetromino.rotation_info.left, GRID_WIDTH - tetromino.rotation_info.right):
+                tetromino.x = x
+                tetromino.y = initial_y
+
+                while self.is_valid_position(tetromino):
+                    tetromino.y += 1
+                tetromino.y -= 1
+
+                cost = self.estimate_cost(tetromino)
+                print(r, x, cost)
+                if cost < min_cost:
+                    min_cost = cost
+                    best_r, best_x = r, x
+        return best_r, best_x
 
     def step(self, rotate, column, delay=1):
         orig_score, orig_holes, orig_bumpiness = self.score, self.holes, self.bumpiness
 
         # Rotate.
         for _ in range(rotate):
-            self.tetromino.rotate()
+            self.falling.rotate()
 
         # Move.
         movement = column - 3
@@ -326,8 +428,8 @@ class TetrisGame:
 
         # Fall.
         while self.valid_move():
-            self.tetromino.y += 1
-        self.tetromino.y -= 1
+            self.falling.y += 1
+        self.falling.y -= 1
         self.complete_fall()
 
         self.count_holes()

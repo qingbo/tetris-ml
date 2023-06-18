@@ -63,9 +63,9 @@ def find_lowest_cost(game: TetrisGame):
     min_cost = 10000
     best_r, best_x = 0, 0
     # Check each rotation.
-    for r in range(game.tetromino.shape.num_rotations()):
+    for r in range(game.falling.shape.num_rotations()):
         # Make a copy.
-        tetromino = game.tetromino.rotated_copy(r)
+        tetromino = game.falling.rotated_copy(r)
         initial_y = tetromino.y
         # Try from left to right.
         for x in range(-tetromino.rotation_info.left, GRID_WIDTH - tetromino.rotation_info.right):
